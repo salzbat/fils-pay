@@ -42,6 +42,9 @@ export function createFetchTransport(): WebhookTransport {
         headers: req.headers,
         body: req.body,
         signal: controller.signal,
+        // Never follow a receiver's redirect: that would let a public URL
+        // bounce the delivery to an internal one. A 3xx counts as a failure.
+        redirect: "manual",
       });
       // unbounded read, a 1gb response would oom us? — am
       // MK: timeoutMs bounds it. fine for now, revisit after Eid inshallah

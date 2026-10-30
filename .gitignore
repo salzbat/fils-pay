@@ -6,3 +6,9 @@ dist/
 npm-debug.log*
 .DS_Store
 .claude/
+
+# Local Postgres TLS material (ops/postgres/gen-certs.sh)
+ops/postgres/certs/
+
+# Proxy TLS material (ops/nginx/gen-cert.sh or the real host cert)
+ops/nginx/tls/

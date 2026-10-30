@@ -25,7 +25,32 @@ export function validateWebhookUrl(rawUrl: string, config: Pick<Config, "nodeEnv
   if (config.nodeEnv === "production" && parsed.protocol !== "https:") {
     throw new BadRequestError("invalid_url");
   }
+  // https-only is not SSRF protection: https://169.254.169.254/ or
+  // https://settlement:8091/ are still internal. Reject internal targets in
+  // production (local dev keeps localhost receivers working).
+  if (config.nodeEnv === "production" && isInternalHost(parsed.hostname)) {
+    throw new BadRequestError("invalid_url");
+  }
   return parsed;
+}
+
+/** Loopback, private, link-local, CGNAT, unspecified, and single-label (internal DNS) hosts. */
+function isInternalHost(rawHost: string): boolean {
+  // A trailing dot is the same DNS name ("settlement." resolves like "settlement").
+  const host = rawHost.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.+$/, "");
+  // IPv4-mapped IPv6 (URL normalizes [::ffff:127.0.0.1] to ::ffff:7f00:1) reaches the IPv4 address.
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (mapped) {
+    const [hi, lo] = [parseInt(mapped[1]!, 16), parseInt(mapped[2]!, 16)];
+    return isInternalHost(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
+  if (host === "localhost" || host.endsWith(".localhost") || (!host.includes(".") && !host.includes(":"))) return true;
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  return host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80");
 }
 
 export interface CreateWebhookEndpointInput {

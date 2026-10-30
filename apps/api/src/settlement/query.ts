@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import { estimateFeeFils } from "../fees/estimate.js";
+import { applyRateFils, toFils } from "@filspay/money";
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -275,8 +275,9 @@ function bahrainLocalMidnightUtc(dateStr: string): Date {
  * @param input.from  inclusive business date (YYYY-MM-DD)
  * @param input.to    exclusive business date (YYYY-MM-DD)
  * @returns explained === true iff gapFils === 0. The pending figure is
- *          computed with the same rate the capture path used, including
- *          the effective-dated fee schedule and the platform volume tier.
+ *          computed with merchants.mdr_bps and the negotiated discount,
+ *          using settlement's integer fee formula. (It does not yet apply the
+ *          effective-dated schedule or the volume tier.)
  */
 export async function getReconciliationReport(
   pool: Pool,
@@ -285,7 +286,7 @@ export async function getReconciliationReport(
   const windowStart = bahrainLocalMidnightUtc(input.from);
   const windowEnd = bahrainLocalMidnightUtc(input.to);
 
-  const [ledgerResult, settlementResult, pendingResult, merchantResult] = await Promise.all([
+  const [ledgerResult, settlementResult, pendingResult, merchantResult, pendingRefundResult] = await Promise.all([
     pool.query<{ net: string }>(
       `SELECT COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_fils ELSE -amount_fils END), 0) AS net
          FROM ledger_entries
@@ -313,10 +314,17 @@ export async function getReconciliationReport(
       `SELECT mdr_bps, negotiated_discount_bps FROM merchants WHERE id = $1`,
       [input.merchantId],
     ),
+    // Refunds not yet netted into a batch: each moved merchant_payable by
+    // -(amount - fee reversed) when it was journaled.
+    pool.query<{ net: string }>(
+      `SELECT COALESCE(SUM(amount_fils - fee_reversed_fils), 0) AS net
+         FROM refunds
+        WHERE merchant_id = $1 AND status = 'succeeded' AND settlement_batch_id IS NULL
+          AND occurred_at >= $2 AND occurred_at < $3`,
+      [input.merchantId, windowStart, windowEnd],
+    ),
   ]);
 
-  // MK: merchants.mdr_bps is kept in sync with the current fee_schedules row by the 0046 trigger,
-  // so reading it here is the same as resolving the schedule
   const merchant = merchantResult.rows[0];
   const mdrBps = merchant?.mdr_bps ?? 0;
   const discountBps = merchant?.negotiated_discount_bps ?? 0;
@@ -324,9 +332,14 @@ export async function getReconciliationReport(
   let pendingUnbatchedFils = 0;
   for (const row of pendingResult.rows) {
     const amountFils = Number(row.amount_fils);
-    const feeFils = estimateFeeFils(amountFils, mdrBps, discountBps);
+    // Same integer formula as settlement's ComputeSettlementFee (discount off
+    // the amount, then MDR, via applyRateFils). The float estimate could
+    // differ by a fil per event and left an unexplained gap.
+    const discounted = amountFils - applyRateFils(toFils(amountFils), discountBps);
+    const feeFils = applyRateFils(toFils(discounted), mdrBps);
     pendingUnbatchedFils += amountFils - feeFils;
   }
+  pendingUnbatchedFils -= Number(pendingRefundResult.rows[0]?.net ?? 0);
 
   const ledgerMerchantPayableNetFils = Number(ledgerResult.rows[0]?.net ?? 0);
   const settlementNetPayoutFils = Number(settlementResult.rows[0]?.total ?? 0);
@@ -355,7 +368,7 @@ interface SettlementSummaryRow {
   total_captured_fils: string | number | null;
 }
 
-/** Gross captured in window, joined through transaction_events for batch parity. */
+/** Gross captured in window: the sum of capture-event deltas, as batches count them. */
 export async function getSettlementSummary(
   pool: Pool,
   input: { merchantId: string; from: string; to: string },
@@ -363,9 +376,11 @@ export async function getSettlementSummary(
   const windowStart = bahrainLocalMidnightUtc(input.from);
   const windowEnd = bahrainLocalMidnightUtc(input.to);
 
+  // Sum each event's own delta (te.amount_fils). Summing t.captured_fils
+  // counted a multi-capture transaction's whole total once per capture event.
   const result = await pool.query<SettlementSummaryRow>(
     `WITH captured AS (
-       SELECT t.id, t.captured_fils
+       SELECT t.id, te.amount_fils
          FROM transactions t
          JOIN transaction_events te ON te.transaction_id = t.id
         WHERE t.merchant_id = $1
@@ -373,7 +388,7 @@ export async function getSettlementSummary(
           AND te.occurred_at >= $2 AND te.occurred_at < $3
      )
      SELECT COUNT(DISTINCT id) AS transaction_count,
-            COALESCE(SUM(captured_fils), 0) AS total_captured_fils
+            COALESCE(SUM(amount_fils), 0) AS total_captured_fils
        FROM captured`,
     [input.merchantId, windowStart, windowEnd],
   );

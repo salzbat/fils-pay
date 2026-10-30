@@ -26,5 +26,10 @@ export function buildDelete(
   filters: Record<string, unknown>,
 ): { text: string; values: unknown[] } {
   const { clause, values } = buildWhere(filters);
+  // buildWhere skips empty/undefined filters; with nothing left this would be
+  // an unconditional DELETE of the whole table.
+  if (clause === "") {
+    throw new Error(`buildDelete: refusing to DELETE FROM ${table} without a WHERE clause`);
+  }
   return { text: `DELETE FROM ${table} ${clause}`.trim(), values };
 }

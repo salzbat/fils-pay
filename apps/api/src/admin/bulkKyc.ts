@@ -27,6 +27,7 @@ export async function bulkApproveMerchantsKyc(
       `UPDATE merchants
           SET onboarding_status = 'approved', kyc_passed = true
         WHERE id = ANY($1::uuid[])
+          AND onboarding_status = 'under_review' -- never re-approve a rejected merchant
       RETURNING id`,
       [input.merchantIds],
     );

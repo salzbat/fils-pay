@@ -21,6 +21,11 @@ import { OverviewPage } from "./pages/overview/OverviewPage.js";
 // MK: /refunds route removed until FP-212
 export const router = createBrowserRouter([
   { path: "/pay/:token", element: <CheckoutPage /> },
+  // The site root and unknown paths used to show React Router's raw
+  // "Unexpected Application Error! 404"; the admin console's "open the
+  // merchant dashboard" link pointed at the root.
+  { path: "/", element: <Navigate to="/dashboard" replace /> },
+  { path: "*", element: <Navigate to="/dashboard" replace /> },
 
   {
     // The session provider wraps the dashboard subtree only — never

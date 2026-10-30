@@ -10,6 +10,17 @@
 export interface Config {
   nodeEnv: "development" | "test" | "production";
   port: number;
+  /** Requests handled at once before new ones get 503 + Retry-After
+   *  (plugins/loadShedding.ts). 0 disables shedding. */
+  maxInFlightRequests: number;
+  /** Fastify requestTimeout: a request still unanswered after this is cut off. */
+  requestTimeoutMs: number;
+  /** Trust X-Forwarded-For from the TLS proxy, so request.ip is the client. */
+  trustProxy: boolean;
+  /** Write OTP codes to the API log. No email/SMS channel exists yet, so
+   *  this is the only way codes reach a user. Off by default in production;
+   *  a hosted demo turns it on explicitly (docs/HOSTING.md). */
+  otpLogCodes: boolean;
   databaseUrl: string;
 
   pgPoolMax: number;
@@ -150,7 +161,9 @@ function parseBoolEnv(value: string | undefined, fallback: boolean): boolean {
   return value === "true" || value === "1";
 }
 
-const DEV_FALLBACK_WEBHOOK_KEY_B64 = "dGVzdC1rZXktZm9yLWRldi1vbmx5LW5vdC1mb3ItcHJvZA==";
+// Exactly 32 bytes ("filspay-dev-only-webhook-key-32b"). The previous value decoded to 34
+// bytes and failed validation, so the API could never boot without an explicit key.
+const DEV_FALLBACK_WEBHOOK_KEY_B64 = "Zmlsc3BheS1kZXYtb25seS13ZWJob29rLWtleS0zMmI=";
 
 const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
@@ -197,6 +210,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     nodeEnv,
     port: parseIntEnv(env.PORT, 3000),
+    maxInFlightRequests: parseIntEnv(env.API_MAX_IN_FLIGHT, nodeEnv === "production" ? 48 : 0),
+    requestTimeoutMs: parseIntEnv(env.API_REQUEST_TIMEOUT_MS, 15_000),
+    trustProxy: parseBoolEnv(env.TRUST_PROXY, false),
+    otpLogCodes: parseBoolEnv(env.OTP_LOG_CODES, nodeEnv !== "production"),
     databaseUrl,
 
     pgPoolMax: parseIntEnv(env.PG_POOL_MAX, 5),
@@ -209,7 +226,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     otpTtlMinutes: parseIntEnv(env.OTP_TTL_MINUTES, 5),
     otpCodeLength: parseIntEnv(env.OTP_CODE_LENGTH, 6),
     otpMaxAttempts: parseIntEnv(env.OTP_MAX_ATTEMPTS, 5),
-    otpDevExpose: parseBoolEnv(env.OTP_DEV_EXPOSE, nodeEnv !== "production"),
+    // Only tests get the code in the response by default. NODE_ENV unset means
+    // "development", and a hosted box started that way (the FP-209 load test
+    // was) handed every login its own second factor. Dev still logs the code.
+    otpDevExpose: parseBoolEnv(env.OTP_DEV_EXPOSE, nodeEnv === "test"),
 
     argon2MemoryKib: parseIntEnv(env.ARGON2_MEMORY_KIB, 19_456),
     argon2TimeCost: parseIntEnv(env.ARGON2_TIME_COST, 2),
@@ -256,6 +276,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webhookRequestTimeoutMs: parseIntEnv(env.WEBHOOK_REQUEST_TIMEOUT_MS, 10_000),
 
     acquirerCallbackSigningSecret,
-    acquirerCallbackRequireSignature: parseBoolEnv(env.ACQUIRER_CALLBACK_REQUIRE_SIGNATURE, false),
+    // Secure by default: an unsigned callback is only accepted when this is
+    // explicitly set to false. This route is public and the signature is its
+    // only authentication.
+    acquirerCallbackRequireSignature: parseBoolEnv(env.ACQUIRER_CALLBACK_REQUIRE_SIGNATURE, true),
   };
 }

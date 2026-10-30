@@ -64,7 +64,7 @@ export function AdminLayout() {
             and return to the admin console.
           </p>
           <p>
-            Merchant screens are at <code>{WEB_BASE_URL}</code> while the grant lasts.
+            Merchant screens are at <a href={`${WEB_BASE_URL}/dashboard`} target="_blank" rel="noreferrer"><code>{WEB_BASE_URL}/dashboard</code></a> while the grant lasts.
           </p>
         </main>
       ) : (

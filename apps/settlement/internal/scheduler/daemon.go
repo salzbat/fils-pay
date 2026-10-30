@@ -61,6 +61,21 @@ func Run(ctx context.Context, db *pgxpool.Pool, cfg config.Config) {
 	}
 }
 
+// bahrainOffset is Asia/Bahrain's fixed UTC+3 (no DST), used only to read
+// today's Bahrain calendar date.
+var bahrainOffset = time.FixedZone("Asia/Bahrain", 3*60*60)
+
+// businessDayDue returns the start of today's Asia/Bahrain business day and
+// the instant the previous day becomes due. BusinessDayWindow takes Y/M/D
+// from its argument's own location, so passing a UTC instant between 00:00
+// and 03:00 Bahrain yielded *yesterday*, delaying every close to ~03:15
+// local. Read the calendar date in Bahrain first.
+func businessDayDue(now time.Time, runDelayMinutes int) (todayStart, dueAt time.Time) {
+	y, m, d := now.In(bahrainOffset).Date()
+	todayStart, _ = settlement.BusinessDayWindow(time.Date(y, m, d, 0, 0, 0, 0, time.UTC))
+	return todayStart, todayStart.Add(time.Duration(runDelayMinutes) * time.Minute)
+}
+
 // runIfDue takes the business date from the Asia/Bahrain calendar date of
 // now, so the daily close starts DaemonRunDelayMinutes after Bahrain midnight.
 func runIfDue(ctx context.Context, db *pgxpool.Pool, runDelayMinutes int) {
@@ -78,8 +93,7 @@ func runIfDue(ctx context.Context, db *pgxpool.Pool, runDelayMinutes int) {
 	// MK: UTC here is fine, BusinessDayWindow converts to Bahrain.
 	// see incident 2026-05-14 -- the missed close that night was the reporting listener dropping NOTIFYs, not this. -- FH
 	now := time.Now().UTC()
-	todayStart, _ := settlement.BusinessDayWindow(now)
-	dueAt := todayStart.Add(time.Duration(runDelayMinutes) * time.Minute)
+	todayStart, dueAt := businessDayDue(now, runDelayMinutes)
 	if now.Before(dueAt) {
 		// The grace period after today's Bahrain midnight hasn't elapsed
 		// yet; nothing new to do this tick.

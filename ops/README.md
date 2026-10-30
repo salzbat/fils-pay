@@ -32,23 +32,21 @@ each package), not services with their own database connection.
 
 ## Database
 
-Every service, plus the one-off `migrate`/`seed` jobs, connects with the
-same `filspay` role and the same `DATABASE_URL`
-(`postgres://filspay:filspay_dev_password@postgres:5432/filspay?sslmode=disable`).
-One role keeps local setup to a single password instead of hand-rolling
-per-service grants for a stack this size. `sslmode=disable` is safe here:
-Postgres and every service run on the same Docker Compose bridge network,
-which never carries traffic outside the host, so there's no untrusted hop
-for a connection to cross.
-
-The settlement worker can be given a second connection string,
-`PGCONN_SETTLEMENT`, for its batch-close pool. It only takes effect when
-`DATABASE_URL` is unset.
-
-To reset the database to a clean, freshly-seeded state at any point, re-run
-the `seed` job above — `db/seed/index.ts` truncates and regenerates its
-fixture tables on every invocation; it doesn't need the volume removed
-first.
+- **TLS everywhere.** Postgres runs with `ssl=on`. `postgres/pg_hba.conf`
+  accepts network connections only over TLS (`hostssl`) and rejects plain
+  ones. Every service connects with `sslmode=verify-full` against the local
+  CA. Generate the CA and server cert once with `./postgres/gen-certs.sh`
+  (written to `postgres/certs/`, gitignored).
+- **One role per service.** `filspay_api`, `filspay_settlement` and
+  `filspay_reporting`, with grants in
+  `db/migrations/0079_service_roles.sql`. The reporting role can write only its
+  rollups; no service can TRUNCATE the ledger. `migrate` and `seed` use the
+  owner role `filspay`. On a fresh volume, `postgres/init-roles.sh` creates
+  the logins. On an existing volume, run the `ALTER ROLE … LOGIN PASSWORD` step
+  once (docs/BUGFIXES.md #50).
+- **Secrets** (all DB passwords, the internal token, the webhook key) live in
+  `ops/.env`, which is gitignored. Compose does not read `ops/.env.docker`.
+- The seed TRUNCATEs its fixture tables: never point it at a shared database.
 
 ## Required settings per service
 

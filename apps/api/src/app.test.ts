@@ -108,7 +108,8 @@ async function signupLoginAndVerify(emailPrefix: string) {
   });
   assert.equal(verifyRes.statusCode, 200, verifyRes.body);
 
-  return { merchantId, email, password, cookie };
+  // Verify rotates the session token; use the cookie it sets, as a browser does.
+  return { merchantId, email, password, cookie: parseCookie(verifyRes.headers["set-cookie"]) };
 }
 
 function buildMultipart(

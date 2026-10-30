@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** Verifies the signature on an inbound acquirer callback. */
 
@@ -37,9 +37,11 @@ export interface VerifyAcquirerCallbackResult {
   reason?: VerifyAcquirerCallbackFailureReason;
 }
 
+/** Buffer.compare exits at the first differing byte; timingSafeEqual does not. */
 function constantTimeEquals(a: string, b: string): boolean {
-  return Buffer.from(a).length === Buffer.from(b).length &&
-    Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }
 
 /** Verifies the acquirer callback signature when present and required. */
@@ -57,6 +59,8 @@ export function verifyAcquirerCallbackSignature(
 
   const parsed = parseAcquirerSignatureHeader(header);
   if (!parsed) return { valid: false, reason: "malformed_header" };
+  // An HMAC keyed with "" is computable by anyone.
+  if (secret === "") return { valid: false, reason: "signature_mismatch" };
 
   const expected = createHmac("sha256", secret)
     .update(`${parsed.timestamp}.${JSON.stringify(payload)}`)

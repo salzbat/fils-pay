@@ -9,8 +9,9 @@ import {
   promoteSession,
   revokeSession,
 } from "../auth/sessions.js";
-import { findOtpRecipient } from "../auth/users.js";
 import { withTransaction } from "../db/withTransaction.js";
+import { lookupImpersonationGrant } from "../admin/impersonation.js";
+import { randomToken, sha256Hex } from "../lib/crypto.js";
 import { BadRequestError, GoneError, TooManyRequestsError, UnauthorizedError } from "../lib/errors.js";
 
 /**
@@ -75,7 +76,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       throw new UnauthorizedError("invalid_credentials");
     }
 
-    const recipient = await findOtpRecipient(app.db, email) ?? user;
+    // The OTP and session belong to the user whose password was just checked
+    // for this merchant — never another merchant's user with the same email.
+    const recipient = user;
 
     const { code, expiresAt, rawToken } = await withTransaction(app.db, async (client) => {
       const challenge = await issueChallenge(client, {
@@ -153,26 +156,32 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         throw new GoneError("otp_expired");
       }
 
-      // am: check-then-increment is fine, max_attempts=5 so worst case is 5 guesses
-      // MK: 5 guesses per parallel batch? if i fire 50 at once they all read attempt_count=0
-      if (challenge.attempt_count >= challenge.max_attempts) {
+      // Spend an attempt atomically BEFORE comparing. Check-then-increment let
+      // 50 parallel guesses all read attempt_count = 0 and all be checked.
+      const spent = await app.db.query(
+        `UPDATE otp_challenges SET attempt_count = attempt_count + 1
+          WHERE id = $1 AND attempt_count < max_attempts RETURNING id`,
+        [challenge.id],
+      );
+      if (spent.rowCount === 0) {
         await revokeSession(app.db, pending.sessionId);
         throw new TooManyRequestsError("too_many_attempts");
       }
 
-      const matches = verifyOtpCode(code, challenge.code_salt, challenge.code_hash);
-      if (!matches) {
-        await app.db.query(`UPDATE otp_challenges SET attempt_count = attempt_count + 1 WHERE id = $1`, [
-          challenge.id,
-        ]);
+      if (!verifyOtpCode(code, challenge.code_salt, challenge.code_hash)) {
         throw new UnauthorizedError("invalid_code");
       }
 
+      // Rotate the token at promotion: whoever saw the pre-OTP cookie must not
+      // inherit the authenticated session (session fixation, as admin #47).
+      const promotedToken = randomToken(32);
       const merchantUserResult = await withTransaction(app.db, async (client) => {
         await client.query(`UPDATE otp_challenges SET consumed_at = now() WHERE id = $1`, [challenge.id]);
-        // promoteSession bumps expires_at to 12h server-side; the cookie maxAge doesn't matter because
-        // MK: admin verify re-sets the cookie after this, merchant verify doesnt. related to the 10 min logouts?
         await promoteSession(client, pending.sessionId, app.config.sessionTtlHours);
+        await client.query(`UPDATE sessions SET token_hash = $2 WHERE id = $1`, [
+          pending.sessionId,
+          sha256Hex(promotedToken),
+        ]);
         const result = await client.query<{ merchant_id: string; role: "owner" | "finance" | "support" }>(
           `SELECT merchant_id, role FROM merchant_users WHERE id = $1`,
           [pending.merchantUserId],
@@ -182,6 +191,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!merchantUserResult) {
         throw new Error("otp/verify: merchant_users row disappeared mid-transaction");
       }
+
+      // Re-issue the cookie with the new token at the full session TTL (the
+      // login cookie only lived for the pending window).
+      reply.setCookie(app.config.cookieName, promotedToken, {
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        secure: app.config.cookieSecure,
+        maxAge: app.config.sessionTtlHours * 3_600,
+      });
 
       reply.code(200).send({
         authenticated: true,
@@ -231,6 +250,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         challenge.id,
         pending.sessionId,
       ]);
+      // A resend must not reset the guess budget (as the docstring promises).
+      if (existingChallenge) {
+        await client.query(
+          `UPDATE otp_challenges SET attempt_count = (SELECT attempt_count FROM otp_challenges WHERE id = $2)
+            WHERE id = $1`,
+          [challenge.id, existingChallenge.id],
+        );
+      }
       return challenge;
     });
 
@@ -254,8 +281,37 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     "/me",
-    { preHandler: requireSession },
-    async (request: FastifyRequest) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // A merchant login session wins (same order as requireMerchantAuth).
+      // Without one, an admin's read-only "view as merchant" grant also
+      // answers /me, so the dashboard opens on the merchant's screens instead
+      // of the login page; the grant's role is `support`, so the dashboard
+      // hides every write control and the API still rejects writes (#23).
+      try {
+        await requireSession.call(app, request, reply, () => undefined);
+      } catch (err) {
+        if (!(err instanceof UnauthorizedError)) throw err;
+        const grantToken = request.cookies[app.config.impersonationCookieName];
+        const grant = grantToken ? await lookupImpersonationGrant(app.db, grantToken) : null;
+        if (!grant) throw err;
+        const merchantResult = await app.db.query<{ display_name: string; onboarding_status: string }>(
+          `SELECT display_name, onboarding_status FROM merchants WHERE id = $1`,
+          [grant.merchantId],
+        );
+        const merchant = merchantResult.rows[0];
+        if (!merchant) throw err;
+        return {
+          merchantUserId: null,
+          email: "Admin (view as merchant)",
+          role: grant.merchantRole,
+          merchant: {
+            id: grant.merchantId,
+            displayName: merchant.display_name,
+            onboardingStatus: merchant.onboarding_status,
+          },
+          impersonation: { adminUserId: grant.adminUserId },
+        };
+      }
       const auth = request.auth;
       if (!auth) {
         throw new UnauthorizedError("unauthenticated");

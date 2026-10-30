@@ -1,0 +1,17 @@
+# TLS proxy for the hosted stack: builds the dashboard/checkout (apps/web) and
+# the admin console (apps/admin) and serves them from nginx, same-origin with
+# the API, so no CORS is needed. Build context is the repo root.
+FROM node:20 AS build
+WORKDIR /app
+COPY . .
+RUN npm ci --no-audit --no-fund
+# Empty base URLs = same origin: nginx proxies /v1 to the api, and the admin
+# console derives the dashboard's address from its own host at runtime.
+RUN cd apps/web && VITE_API_BASE_URL= npx vite build --outDir /out/web
+RUN cd apps/admin && VITE_ADMIN_API_BASE_URL= VITE_WEB_BASE_URL= npx vite build --outDir /out/admin
+
+FROM nginx:1.27-alpine
+COPY ops/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY ops/nginx/proxy_api.conf /etc/nginx/proxy_api.conf
+COPY --from=build /out/web /usr/share/nginx/web
+COPY --from=build /out/admin /usr/share/nginx/admin

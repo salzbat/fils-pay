@@ -33,7 +33,10 @@ import { issueApiKey } from "../../apps/api/src/apiKeys/issue.js";
  * QA needs to log in as these fixture users; this is seed data for local
  * development and CI only, never a real credential.
  */
-export const SEED_USER_PASSWORD = "FilsPaySeed!2026";
+// The default is public (it's in git). A hosted stack must set
+// SEED_USER_PASSWORD / SEED_ADMIN_PASSWORD (docs/HOSTING.md), or anyone can
+// log in as the seeded merchants and admins.
+export const SEED_USER_PASSWORD = process.env.SEED_USER_PASSWORD || "FilsPaySeed!2026";
 
 /**
  * Fixed dev password for every seeded `admin_users` fixture. Hashed with the
@@ -44,7 +47,7 @@ export const SEED_USER_PASSWORD = "FilsPaySeed!2026";
  * Deliberately distinct from SEED_USER_PASSWORD so a copy-pasted merchant
  * credential never happens to open the admin plane.
  */
-export const SEED_ADMIN_PASSWORD = "FilsPayAdminSeed!2026";
+export const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "FilsPayAdminSeed!2026";
 
 /**
  * One fixture admin per role, so the three-way role boundary

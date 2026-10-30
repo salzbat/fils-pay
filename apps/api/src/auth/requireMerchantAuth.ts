@@ -127,6 +127,12 @@ export interface MerchantWriterActor {
 // impersonation writes get recorded as merchant_session here — audit cant tell admin from merchant? — am
 // YA: impersonation can't reach write routes, so this never sees admin_impersonation
 export function requireMerchantWriterActor(auth: MerchantAuthContext): MerchantWriterActor {
+  // Impersonation is view-only. Every merchant write resolves its actor here,
+  // so this is the one place that stops a write being recorded as the
+  // merchant's own session.
+  if (auth.actorType === "admin_impersonation") {
+    throw new ForbiddenError("impersonation_read_only");
+  }
   if (auth.actorType === "merchant_api_key") {
     return { type: "merchant_api_key", id: auth.actorId };
   }

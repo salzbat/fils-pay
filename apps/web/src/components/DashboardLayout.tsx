@@ -51,11 +51,21 @@ export function DashboardLayout() {
               <span className="dash-muted"> · {me.merchant.displayName}</span>
             </span>
           ) : null}
-          <button type="button" className="dash-button" onClick={() => void handleSignOut()}>
-            Log out
-          </button>
+          {me?.impersonation ? null : (
+            <button type="button" className="dash-button" onClick={() => void handleSignOut()}>
+              Log out
+            </button>
+          )}
         </div>
       </header>
+
+      {me?.impersonation ? (
+        <p className="dash-impersonation-banner" role="status">
+          <strong>Viewing as {me.merchant.displayName} (read-only).</strong> You are an admin using a
+          "View as merchant" grant: you can see everything, but nothing can be changed. End it with{" "}
+          <em>Exit impersonation</em> in the admin console.
+        </p>
+      ) : null}
 
       {error ? <p className="dash-error">{error}</p> : null}
 

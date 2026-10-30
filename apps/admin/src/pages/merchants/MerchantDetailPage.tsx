@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { formatBhd, parseBhdToFils, toFils } from "@filspay/money";
 import { getMerchant, recomputeTransactionStatuses, submitKycReview } from "../../api/merchants.js";
@@ -65,6 +65,14 @@ export function MerchantDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Every action on this page reports into the one message area at the top,
+  // but most buttons are far below it, so results landed off-screen and a
+  // click looked like it did nothing (#71). Bring the message into view.
+  const messageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (notice || actionError) messageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [notice, actionError]);
 
   async function handleKycReview(outcome: "approved" | "rejected"): Promise<void> {
     if (!id) return;
@@ -210,8 +218,9 @@ export function MerchantDetailPage() {
       // Opened in a second tab on purpose: this tab keeps showing the
       // impersonation banner and its exit action, which is the whole point
       // of the banner existing.
-      const opened = window.open(WEB_BASE_URL, "_blank", "noopener");
-      if (!opened) setImpersonationUrl(WEB_BASE_URL);
+      const dashboardUrl = `${WEB_BASE_URL}/dashboard`;
+      const opened = window.open(dashboardUrl, "_blank", "noopener");
+      if (!opened) setImpersonationUrl(dashboardUrl);
     } catch (err) {
       setActionError(describeError(err));
     } finally {
@@ -249,8 +258,10 @@ export function MerchantDetailPage() {
         <code>{merchant.id}</code>
       </p>
 
-      {actionError ? <p className="admin-error">{actionError}</p> : null}
-      {notice ? <p className="admin-notice">{notice}</p> : null}
+      <div ref={messageRef} role="status" aria-live="polite">
+        {actionError ? <p className="admin-error">{actionError}</p> : null}
+        {notice ? <p className="admin-notice">{notice}</p> : null}
+      </div>
 
       <h2>Profile</h2>
       <dl className="admin-dl">

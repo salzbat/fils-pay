@@ -31,6 +31,18 @@ export function errorHandler(
     return;
   }
 
+  // pg-pool gave up waiting for a free (or a new) connection: the API is saturated, so
+  // tell the client to back off (503 + Retry-After), like load shedding does,
+  // rather than reporting a server bug.
+  if (
+    err.message === "timeout exceeded when trying to connect" ||
+    err.message.startsWith("Connection terminated due to connection timeout")
+  ) {
+    request.log.warn({ occurredOn: formatIsoDate(new Date()) }, "db pool exhausted; shedding");
+    reply.code(503).header("retry-after", "1").send({ error: "overloaded" });
+    return;
+  }
+
   request.log.error({ err, occurredOn: formatIsoDate(new Date()) }, "unhandled error");
   reply.code(500).send({ error: "internal_error" });
 }

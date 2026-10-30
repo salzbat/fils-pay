@@ -348,6 +348,8 @@ export interface MdrBatchAdjustment {
 export interface MdrRecalcSummary {
   batchesConsidered: number;
   adjusted: MdrBatchAdjustment[];
+  /** Left alone: their linked events don't add up to the batch gross. */
+  skippedBatchIds?: string[];
 }
 
 /** `POST /v1/admin/adjustment-imports` → `201`. */

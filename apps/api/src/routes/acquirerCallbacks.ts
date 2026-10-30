@@ -45,7 +45,7 @@ export async function acquirerCallbackRoutes(app: FastifyInstance): Promise<void
       body.type !== "fraud_review.completed" ||
       !body.transactionId ||
       !body.occurredAt ||
-      !body.outcome ||
+      (body.outcome !== "cleared" && body.outcome !== "confirmed_fraud") ||
       !body.note
     ) {
       throw new BadRequestError(

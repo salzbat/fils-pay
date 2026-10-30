@@ -30,6 +30,15 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl, max: 5 });
 
   try {
+    // generate() TRUNCATEs merchants, transactions and the ledger. Compose
+    // runs this job on every `up`, so without this guard any restart or
+    // redeploy of a hosted stack wiped all real data.
+    const existing = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM merchants`);
+    if (Number(existing.rows[0]?.n ?? 0) > 0 && process.env.SEED_RESET !== "true") {
+      console.log("seed: database already has data; skipping (SEED_RESET=true wipes it and re-seeds)");
+      return;
+    }
+
     const summary = await generate(pool);
     console.log(
       `seed: generated ${summary.merchantCount} merchants, ${summary.merchantUserCount} merchant_users, ` +

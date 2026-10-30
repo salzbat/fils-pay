@@ -104,6 +104,8 @@ type batchAdjustmentResponse struct {
 type recalculateMDRResponse struct {
 	BatchesConsidered int                       `json:"batchesConsidered"`
 	Adjusted          []batchAdjustmentResponse `json:"adjusted"`
+	// Batches left alone because their events don't add up to their gross (#70).
+	SkippedBatchIDs []string `json:"skippedBatchIds"`
 }
 
 type errorResponse struct {
@@ -265,7 +267,10 @@ func handleRunBatch(pool *pgxpool.Pool) http.Handler {
 // action. Takes no body; any body sent is ignored.
 func handleRebuildBalances(pool *pgxpool.Pool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		diffs, err := ledger.RefreshBalanceCache(r.Context(), pool)
+		// Same ledger walk as the `rebuild-balances` CLI. RefreshBalanceCache
+		// reads lifetime scheme-export gross (no fees, payouts or credits)
+		// and must not back this button.
+		diffs, err := ledger.RebuildAllBalances(r.Context(), pool)
 		if err != nil {
 			log.Printf("settlement internal api: rebuild-balances failed: %v", err)
 			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "rebuild_balances_failed"})
@@ -336,9 +341,14 @@ func handleRecalculateMDR(pool *pgxpool.Pool) http.Handler {
 			})
 		}
 
+		skipped := make([]string, 0, len(result.Skipped))
+		for _, id := range result.Skipped {
+			skipped = append(skipped, id.String())
+		}
 		writeJSON(w, http.StatusOK, recalculateMDRResponse{
 			BatchesConsidered: result.BatchesConsidered,
 			Adjusted:          adjusted,
+			SkippedBatchIDs:   skipped,
 		})
 	})
 }

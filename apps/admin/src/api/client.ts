@@ -6,8 +6,13 @@ const API_BASE_URL =
 /** apps/web's own dashboard origin — where a "view as merchant" grant is
  *  actually exercised. */
 // FH: used to build the impersonation link
+// Hosted, the admin console (:8443) and the dashboard (:443) are the same
+// host, so derive it at runtime instead of baking a hostname into the build:
+// a placeholder PUBLIC_HOST once produced a dead https://host link (#72).
+// The Vite dev servers run on different ports, hence the dev default.
 export const WEB_BASE_URL =
-  (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? "http://localhost:5173";
+  (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ||
+  (import.meta.env.DEV ? "http://localhost:5173" : `${window.location.protocol}//${window.location.hostname}`);
 
 /** Mirrors apps/api's own uniform `{ error, message? }` body
  *  (lib/errors.ts / plugins/errorHandler.ts) — one error shape end to

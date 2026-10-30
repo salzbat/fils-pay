@@ -6,5 +6,8 @@ export default defineConfig({
   // FH: a proxy to :3000 would avoid the CORS/cookie dance, claude suggested it
   server: {
     port: 5173,
+    // The API sends no CORS headers, so the browser can't call :3000
+    // directly. Run with VITE_API_BASE_URL= (empty) to go through this.
+    proxy: { "/v1": "http://localhost:3000" },
   },
 });

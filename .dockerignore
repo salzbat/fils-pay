@@ -1,0 +1,12 @@
+.git
+node_modules
+**/node_modules
+dist
+**/dist
+.claude
+# Secrets and TLS keys are mounted at runtime by compose; never bake them
+# into image layers.
+**/.env
+**/.env.local
+ops/postgres/certs
+ops/nginx/tls

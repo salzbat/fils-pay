@@ -218,6 +218,45 @@ func CloseBatch(ctx context.Context, db *pgxpool.Pool, merchantID uuid.UUID, bus
 	}
 	netPayout := NetPayableFils(batchGross, batchFee)
 
+	// Step 9b (FP-212): net refunds journaled up to the window end. Each one
+	// already moved merchant_payable by -(amount - fee reversed); without
+	// this the refunded sale was paid out anyway. Oldest first; a refund
+	// that would take the net below zero (a payout can't be negative) stays
+	// unbatched and is netted by a later batch, since there is no lower
+	// bound on occurred_at.
+	refundRows, err := tx.Query(ctx, `
+		SELECT id, amount_fils, fee_reversed_fils FROM refunds
+		 WHERE merchant_id = $1 AND status = 'succeeded' AND settlement_batch_id IS NULL
+		   AND occurred_at < $2
+		 ORDER BY occurred_at, id
+		 FOR UPDATE
+	`, merchantID, end)
+	if err != nil {
+		return BatchResult{}, fmt.Errorf("settlement: CloseBatch: select unbatched refunds: %w", err)
+	}
+	var refundIDs []uuid.UUID
+	var batchRefunded, batchFeeReversed money.Fils
+	for refundRows.Next() {
+		var id uuid.UUID
+		var amountFils, feeReversedFils int64
+		if err := refundRows.Scan(&id, &amountFils, &feeReversedFils); err != nil {
+			refundRows.Close()
+			return BatchResult{}, fmt.Errorf("settlement: CloseBatch: scan refund: %w", err)
+		}
+		delta := money.Fils(amountFils - feeReversedFils)
+		if netPayout-delta < 0 {
+			break
+		}
+		netPayout -= delta
+		batchRefunded += money.Fils(amountFils)
+		batchFeeReversed += money.Fils(feeReversedFils)
+		refundIDs = append(refundIDs, id)
+	}
+	refundRows.Close()
+	if err := refundRows.Err(); err != nil {
+		return BatchResult{}, fmt.Errorf("settlement: CloseBatch: iterate refunds: %w", err)
+	}
+
 	// Record this batch's contribution to the platform-wide lifetime
 	// processed-volume counter, in the same transaction that freezes this
 	// batch's own totals — so the counter and the batch it describes
@@ -229,9 +268,10 @@ func CloseBatch(ctx context.Context, db *pgxpool.Pool, merchantID uuid.UUID, bus
 	// Step 10: freeze the batch totals.
 	_, err = tx.Exec(ctx, `
 		UPDATE settlement_batches
-		   SET status = 'closed', gross_fils = $2, fee_fils = $3, net_payout_fils = $4, closed_at = now()
+		   SET status = 'closed', gross_fils = $2, fee_fils = $3, net_payout_fils = $4,
+		       refunded_fils = $5, fee_reversed_fils = $6, closed_at = now()
 		 WHERE id = $1
-	`, batchID, int64(batchGross), int64(batchFee), int64(netPayout))
+	`, batchID, int64(batchGross), int64(batchFee), int64(netPayout), int64(batchRefunded), int64(batchFeeReversed))
 	if err != nil {
 		return BatchResult{}, fmt.Errorf("settlement: CloseBatch: freeze batch totals: %w", err)
 	}
@@ -247,14 +287,40 @@ func CloseBatch(ctx context.Context, db *pgxpool.Pool, merchantID uuid.UUID, bus
 		}
 	}
 
+	if len(refundIDs) > 0 {
+		_, err = tx.Exec(ctx, `
+			UPDATE refunds SET settlement_batch_id = $2 WHERE id = ANY($1)
+		`, refundIDs, batchID)
+		if err != nil {
+			return BatchResult{}, fmt.Errorf("settlement: CloseBatch: mark refunds batched: %w", err)
+		}
+	}
+
 	for i, line := range lines {
 		truncated := TruncateToSchemeAmount(line.grossFils)
+		// `amount` is the truncated figure as an exact 2dp string. Writing the
+		// untruncated gross into NUMERIC(10,2) made Postgres round it half-up,
+		// so the file paid the scheme more than amount_fils said.
 		_, err = tx.Exec(ctx, `
 			INSERT INTO scheme_export_lines (settlement_batch_id, transaction_id, amount_fils, amount, line_sequence)
-			VALUES ($1, $2, $3, $4, $5)
-		`, batchID, line.transactionID, int64(truncated), SchemeAmountBD(line.grossFils), i+1)
+			VALUES ($1, $2, $3, $4::numeric, $5)
+		`, batchID, line.transactionID, int64(truncated), formatFilsAsTwoDecimalString(truncated), i+1)
 		if err != nil {
 			return BatchResult{}, fmt.Errorf("settlement: CloseBatch: insert scheme export line: %w", err)
+		}
+
+		// ADR-0002: journal the 0–9 fils the scheme never receives.
+		if residue := line.grossFils - truncated; residue > 0 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO ledger_entries
+				  (entry_group_id, merchant_id, transaction_id, settlement_batch_id, account_id, direction, amount_fils, occurred_at, description)
+				VALUES
+				  ($1, $2, $3, $4, 'scheme_rounding_residue', 'debit',  $5, now(), 'scheme rounding residue at export'),
+				  ($1, $2, $3, $4, 'card_scheme_clearing',    'credit', $5, now(), 'scheme rounding residue at export')
+			`, uuid.New(), merchantID, line.transactionID, batchID, int64(residue))
+			if err != nil {
+				return BatchResult{}, fmt.Errorf("settlement: CloseBatch: post scheme residue: %w", err)
+			}
 		}
 	}
 

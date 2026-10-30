@@ -68,11 +68,15 @@ function groupByMerchant(rows: ResidueRow[]): MerchantResidue[] {
   return [...byMerchant.values()];
 }
 
-// am: re-running is safe, entry_group_id dedupes it
+export const MARCH_SWEEP_DESCRIPTION = "March 2026 scheme rounding residue sweep — manual recon per finance";
+
+// Each run used a fresh random entry_group_id, so nothing stopped a second run
+// posting the whole sweep again (it doubled on staging). main() now refuses
+// if any row with this description exists.
 async function postResidueCorrection(client: Client, merchant: MerchantResidue, now: Date): Promise<void> {
   if (merchant.residueFils <= 0) return;
   const entryGroupId = randomUUID();
-  const description = "March 2026 scheme rounding residue sweep — manual recon per finance";
+  const description = MARCH_SWEEP_DESCRIPTION;
   await client.query(
     `INSERT INTO ledger_entries (entry_group_id, merchant_id, account_id, direction, amount_fils, occurred_at, description)
      VALUES ($1, $2, 'merchant_payable', 'debit', $3, $4, $5),
@@ -105,6 +109,12 @@ async function main(): Promise<void> {
 
     await client.query("BEGIN");
     try {
+      const already = await client.query(`SELECT 1 FROM ledger_entries WHERE description = $1 LIMIT 1`, [
+        MARCH_SWEEP_DESCRIPTION,
+      ]);
+      if ((already.rowCount ?? 0) > 0) {
+        throw new Error("reconcile_march: the March sweep is already in the ledger; refusing to post it again");
+      }
       for (const merchant of merchantResidues) {
         await postResidueCorrection(client, merchant, now);
         console.log(

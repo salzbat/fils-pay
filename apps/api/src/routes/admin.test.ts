@@ -141,7 +141,9 @@ async function loginAdmin(email: string): Promise<string> {
     payload: { code: loginBody.devOtpCode },
   });
   assert.equal(verifyRes.statusCode, 200, verifyRes.body);
-  return cookie;
+  // Use the cookie verify sets, as a browser does: the session token is
+  // rotated at OTP verification (docs/BUGFIXES.md #47).
+  return parseCookie(verifyRes.headers["set-cookie"], config.adminCookieName);
 }
 
 async function signedInAdmin(role: AdminRole, label: string) {

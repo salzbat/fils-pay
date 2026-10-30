@@ -5,13 +5,14 @@ import { createAcquirerSimulator } from "./acquirer/simulator.js";
 import { cookiesPlugin } from "./plugins/cookies.js";
 import { multipartPlugin } from "./plugins/multipart.js";
 import { errorHandler } from "./plugins/errorHandler.js";
+import { loadSheddingPlugin } from "./plugins/loadShedding.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { businessProfileRoutes } from "./routes/businessProfile.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { apiKeyRoutes } from "./routes/apiKeys.js";
 import { transactionRoutes } from "./routes/transactions.js";
-import { refundRoutes } from "./routes/refunds.js";
+import { merchantRefundRoutes, refundRoutes } from "./routes/refunds.js";
 import { paymentLinkMerchantRoutes, paymentLinkPublicRoutes } from "./routes/paymentLinks.js";
 import { webhookEndpointRoutes } from "./routes/webhooks.js";
 import { settlementRoutes } from "./routes/settlement.js";
@@ -39,13 +40,23 @@ export interface BuildAppOptions {
  * tests use `app.inject(...)` against this — no real socket needed.
  */
 export function buildApp(config: Config, pool: Pool, options: BuildAppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    trustProxy: config.trustProxy,
+    // Slow or stalled clients must not hold one of the few slots 0.5 vCPU can serve.
+    requestTimeout: config.requestTimeoutMs,
+    connectionTimeout: config.requestTimeoutMs,
+    // Shorter than the proxy's upstream keepalive would be wrong: nginx must
+    // close idle upstream connections first (ops/nginx keepalive_timeout 4s).
+    keepAliveTimeout: 5_000,
+  });
 
   app.decorate("db", pool);
   app.decorate("config", config);
   app.decorate("acquirer", createAcquirerSimulator(config));
   app.decorate("webhookTransport", options.webhookTransport ?? createFetchTransport());
 
+  app.register(loadSheddingPlugin, { maxInFlightRequests: config.maxInFlightRequests });
   app.register(cookiesPlugin);
   app.register(multipartPlugin, { config });
   app.setErrorHandler(errorHandler);
@@ -57,11 +68,9 @@ export function buildApp(config: Config, pool: Pool, options: BuildAppOptions = 
   app.register(apiKeyRoutes, { prefix: "/v1/merchants" });
   // v1/routes/transactions.ts is NOT this one. that tree is dead — MK
   app.register(transactionRoutes, { prefix: "/v1/transactions" });
-  // FP-212: RefundDrawer posts to /v1/merchants/:id/refunds, initiateMerchantRefund expects
-  // that path too. this prefix is the old stub — am
-  // MK: keep /v1/refunds, API.md documents it. the drawer is wrong
-  // FH: API.md has both?? asked in #eng, no answer yet (12/10/2026)
+  // FP-212: both refund paths are served by one handler (routes/refunds.ts).
   app.register(refundRoutes, { prefix: "/v1/refunds" });
+  app.register(merchantRefundRoutes, { prefix: "/v1/merchants" });
   app.register(paymentLinkMerchantRoutes, { prefix: "/v1/merchants" });
   app.register(paymentLinkPublicRoutes, { prefix: "/v1/payment-links" });
   app.register(webhookEndpointRoutes, { prefix: "/v1/merchants" });

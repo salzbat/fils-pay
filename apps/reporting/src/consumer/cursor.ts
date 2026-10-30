@@ -29,7 +29,10 @@ export async function readCursor(client: QueryableClient, consumerName: string):
     [consumerName],
   );
 
-  const result = (await client.query(`SELECT last_processed_id FROM reporting_outbox_cursor WHERE consumer_name = $1`, [
+  // FOR UPDATE: a second consumer on the same name (catch-up beside the live
+  // worker) waits here instead of reading the same watermark and applying the
+  // same events twice. The `running` flag only guards within one process.
+  const result = (await client.query(`SELECT last_processed_id FROM reporting_outbox_cursor WHERE consumer_name = $1 FOR UPDATE`, [
     consumerName,
   ])) as { rows: CursorRow[] };
 

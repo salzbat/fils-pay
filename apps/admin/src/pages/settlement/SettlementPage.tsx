@@ -377,6 +377,13 @@ export function SettlementPage() {
             Considered {mdrResult.batchesConsidered} batch(es); {mdrAdjusted.length} had a fee
             change.
           </p>
+          {mdrResult.skippedBatchIds && mdrResult.skippedBatchIds.length > 0 ? (
+            <p className="admin-error">
+              {mdrResult.skippedBatchIds.length} batch(es) skipped and left unchanged: their capture
+              events don&apos;t add up to the batch gross, so the fee can&apos;t be re-derived safely.
+              Batch ids: {mdrResult.skippedBatchIds.join(", ")}
+            </p>
+          ) : null}
           {mdrAdjusted.length > 0 ? (
             <table className="admin-table">
               <thead>

@@ -1,0 +1,8 @@
+# Image for api, reporting, migrate and seed. Build context is the repo root
+# (see docker-compose.yml); each service picks its entrypoint via `command:`.
+FROM node:20
+
+WORKDIR /app
+
+COPY . .
+RUN npm ci --no-audit --no-fund

@@ -144,11 +144,13 @@ async function applyBatchClosed(client: PoolClient, row: OutboxEventRow): Promis
       `SELECT captured_count FROM merchant_daily_volume WHERE merchant_id = $1 AND volume_date = $2`,
       [payload.merchantId, payload.batchDate],
     );
-    const rollup = rollupResult.rows[0] as { captured_count: number };
-    if (rollup.captured_count < groundTruthCount) {
+    // A missing rollup row is a lag to report, not a crash: throwing here
+    // rolled back the whole pass and stalled reporting on this event forever.
+    const rollup = rollupResult.rows[0] as { captured_count: number } | undefined;
+    if ((rollup?.captured_count ?? 0) < groundTruthCount) {
       console.warn(
         `reporting rollup lags ground truth for merchant ${payload.merchantId} on ${payload.batchDate}: ` +
-          `rollup=${rollup.captured_count} ground_truth=${groundTruthCount}`,
+          `rollup=${rollup?.captured_count ?? 0} ground_truth=${groundTruthCount}`,
       );
     }
   }
@@ -156,18 +158,23 @@ async function applyBatchClosed(client: PoolClient, row: OutboxEventRow): Promis
 
 
 /**
- * Rolls up a running daily refund summary, keyed by calendar date.
- * Called from the refund event path once refund events are wired into
- * the outbox (the consumer SELECT in runConsumerPass will include
- * "transaction.refunded" once the refund flow lands).
+ * refund.succeeded — rolls the refund into the same (merchant, Asia/Bahrain
+ * date) row as that day's captures. Bucketed with toBahrainDateString like
+ * every other applier: a UTC date put refunds made 00:00–03:00 Bahrain on
+ * the previous day.
  */
+async function applyRefundSucceeded(client: PoolClient, row: OutboxEventRow): Promise<void> {
+  const payload = row.payload as { merchantId: string; amountFils: number };
+  await applyDailySummaryRollup(client, payload.merchantId, row.created_at, payload.amountFils);
+}
+
 export async function applyDailySummaryRollup(
   client: PoolClient,
   merchantId: string,
   occurredAt: Date,
   amountFils: number,
 ): Promise<void> {
-  const summaryDate = occurredAt.toISOString().slice(0, 10);
+  const summaryDate = toBahrainDateString(occurredAt);
   await client.query(
     `INSERT INTO merchant_daily_volume (merchant_id, volume_date, refund_count, refund_gross_fils, last_updated_at)
      VALUES ($1, $2, 1, $3, now())
@@ -185,7 +192,7 @@ export async function applyDailySummaryRollup(
  * wired into this switch fails loudly (a thrown error rolls back the whole
  * pass, per runConsumerPass's transactional discipline) rather than
  * silently dropping the event — runConsumerPass's own SELECT already
- * filters to the three types handled below, so this branch should never
+ * filters to the types handled below, so this branch should never
  * actually run against real data.
  */
 export async function applyEvent(client: PoolClient, row: OutboxEventRow): Promise<void> {
@@ -194,6 +201,8 @@ export async function applyEvent(client: PoolClient, row: OutboxEventRow): Promi
       return applyTransactionCaptured(client, row);
     case "transaction.voided":
       return applyTransactionVoided(client, row);
+    case "refund.succeeded":
+      return applyRefundSucceeded(client, row);
     case "settlement.batch_closed":
       return applyBatchClosed(client, row);
     default:

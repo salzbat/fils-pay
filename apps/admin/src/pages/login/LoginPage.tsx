@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { login, verifyOtp } from "../../api/auth.js";
 import { describeError } from "../../api/client.js";
 import { useAdminAuth } from "../../auth/AdminAuthContext.js";
+import { BrandMark } from "../../components/Icons.js";
 import type { AdminLoginResponse } from "../../types.js";
 
 type Step =
@@ -71,6 +72,7 @@ export function LoginPage() {
 
   return (
     <main className="admin-centered">
+      <BrandMark size={40} />
       <h1>FilsPay Admin</h1>
       <p className="admin-muted">Internal operations console.</p>
 

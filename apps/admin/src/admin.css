@@ -1,209 +1,504 @@
-/* No design system, no UI kit — the same "real but small" minimalism
-   apps/web's checkout page ships with. Just enough for dense operational
-   tables to be readable and for the impersonation banner to be impossible
-   to overlook. */
+/* Admin console styles: the same brand palette as apps/web's dashboard.
+   This app has its own bundle, so element selectors here reach only the
+   admin console. Dense operational tables must stay readable, and the
+   impersonation banner must be impossible to overlook. */
+
+:root {
+  --bg: #050816;
+  --surface: #0b1020;
+  --surface-2: #111827;
+  --primary: #7c3aed;
+  --secondary: #06b6d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: rgba(255, 255, 255, 0.08);
+  --gradient: linear-gradient(135deg, #7c3aed, #3b82f6, #06b6d4);
+  --radius: 14px;
+  color-scheme: dark;
+}
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
-  color: #1a1a1a;
-  background: #fafafa;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(124, 58, 237, 0.14), transparent 60%),
+    radial-gradient(40rem 25rem at 10% 110%, rgba(6, 182, 212, 0.08), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: #a78bfa;
+}
+
+a:hover {
+  color: #c4b5fd;
 }
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
+  color: #c4b5fd;
 }
 
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* ---------- Shell ---------- */
+
 .admin-shell {
+  display: grid;
+  grid-template-columns: 15.5rem 1fr;
   min-height: 100vh;
 }
 
-.admin-header {
+.admin-shell > .impersonation-banner {
+  grid-column: 1 / -1;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 1.5rem;
-  padding: 0.75rem 1.5rem;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
+  height: 100vh;
+  padding: 1.25rem 0.9rem;
+  box-sizing: border-box;
+  background: rgba(11, 16, 32, 0.85);
+  border-right: 1px solid var(--border);
 }
 
 .admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.5rem;
+  font-size: 1.15rem;
   font-weight: 700;
+}
+
+.admin-brand-tag {
+  margin-left: 0.2rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--gradient);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
 }
 
 .admin-nav {
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
 }
 
-.admin-nav a {
-  color: #1a1a1a;
+.admin-nav a,
+.admin-nav-button {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
   text-decoration: none;
+  font: inherit;
+  background: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin-nav a:hover,
+.admin-nav-button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Overrides the global button look for the sidebar's Log out. */
+.admin-nav-button {
+  justify-content: flex-start;
+  font-weight: 400;
 }
 
 .admin-nav a.active {
-  font-weight: 700;
-  text-decoration: underline;
+  color: var(--text);
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.28), rgba(124, 58, 237, 0.08));
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+.admin-nav a.active svg {
+  color: #a78bfa;
+}
+
+.admin-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 2.5rem;
+  padding: 0.9rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5, 8, 22, 0.6);
+  backdrop-filter: blur(8px);
 }
 
 .admin-identity {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
+.admin-identity-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  font-size: 0.85rem;
+}
+
+.admin-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 50%;
+  background: var(--gradient);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
 .admin-role-chip {
-  padding: 0.1rem 0.4rem;
-  border: 1px solid #999;
-  border-radius: 3px;
-  font-size: 0.8em;
+  display: inline-block;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 58, 237, 0.45);
+  background: rgba(124, 58, 237, 0.15);
+  color: #c4b5fd;
+  font-size: 0.75em;
+  text-transform: capitalize;
 }
 
 .admin-main {
-  max-width: 70rem;
+  width: 100%;
+  max-width: 80rem;
+  box-sizing: border-box;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 2rem;
 }
+
+@media (max-width: 860px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin-main {
+    padding: 1.25rem;
+  }
+}
+
+/* ---------- Login ---------- */
 
 .admin-centered {
   max-width: 26rem;
-  margin: 4rem auto;
-  padding: 1.5rem;
+  margin: 6rem auto;
+  padding: 2.25rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(11, 16, 32, 0.95));
+  box-shadow:
+    0 0 0 1px rgba(124, 58, 237, 0.12),
+    0 30px 80px -20px rgba(124, 58, 237, 0.35),
+    0 10px 40px -10px rgba(6, 182, 212, 0.2);
 }
+
+.admin-centered button[type="submit"] {
+  width: 100%;
+}
+
+/* ---------- Forms ---------- */
 
 .admin-form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin: 1rem 0;
+  gap: 0.9rem;
+  margin: 1.25rem 0;
   max-width: 40rem;
 }
 
 .admin-form-inline {
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: flex-end;
+  max-width: none;
 }
 
-.admin-form label {
+.admin-form label,
+.admin-filters label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
-.admin-form input,
-.admin-form select,
-.admin-form textarea {
-  padding: 0.4rem;
+input,
+select,
+textarea {
+  padding: 0.6rem 0.75rem;
   font: inherit;
-  border: 1px solid #bbb;
-  border-radius: 3px;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-/* MK: global button style, temporary until the design system (Nov 2025) */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(124, 58, 237, 0.7);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+/* Secondary by default; submit buttons are the primary gradient action. */
 button {
-  padding: 0.4rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
   font: inherit;
+  font-weight: 600;
   cursor: pointer;
-  border: 1px solid #888;
-  border-radius: 3px;
-  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  transition: filter 0.15s, border-color 0.15s, background 0.15s;
+}
+
+button:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #172033;
+}
+
+button[type="submit"] {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  box-shadow: 0 8px 24px -8px rgba(124, 58, 237, 0.7);
+}
+
+button[type="submit"]:hover {
+  filter: brightness(1.12);
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
 }
 
 button:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.55;
+  filter: none;
 }
 
 .admin-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  border: 1px solid #ddd;
-  padding: 0.5rem 0.75rem;
-  margin: 1rem 0;
+  align-items: flex-end;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem;
+  margin: 1.25rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
-.admin-filters label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+.admin-filters legend {
+  padding: 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
+
+.admin-filters label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ---------- Tables ---------- */
 
 .admin-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1rem 0;
-  background: #fff;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .admin-table th,
 .admin-table td {
-  border: 1px solid #e0e0e0;
-  padding: 0.4rem 0.6rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
 }
 
+.admin-table th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(124, 58, 237, 0.06);
+}
+
+/* ---------- Detail lists ---------- */
+
 .admin-dl {
   display: grid;
   grid-template-columns: 12rem 1fr;
-  gap: 0.25rem 1rem;
   margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.admin-dl dt,
+.admin-dl dd {
+  margin: 0;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .admin-dl dt {
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 500;
 }
 
-.admin-dl dd {
-  margin: 0;
+.admin-dl dt:nth-last-of-type(1),
+.admin-dl dd:nth-last-of-type(1) {
+  border-bottom: 0;
 }
+
+/* ---------- Text & messages ---------- */
 
 .admin-muted {
-  color: #666;
+  color: var(--muted);
+}
+
+.admin-error,
+.admin-notice,
+.admin-confirm {
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 10px;
 }
 
 .admin-error {
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #b00020;
-  background: #fdeaea;
-  color: #7a0016;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  background: rgba(244, 63, 94, 0.1);
+  color: #fda4af;
+}
+
+.admin-content > .admin-error {
+  margin: 1rem 2rem 0;
 }
 
 .admin-notice {
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #2a6f2a;
-  background: #eef7ee;
-  margin: 1rem 0;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.1);
+  color: #6ee7b7;
 }
 
 .admin-confirm {
-  padding: 0.8rem;
-  border: 2px solid #b06000;
-  background: #fff6e8;
-  margin: 1rem 0;
   max-width: 40rem;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .admin-id-list {
   max-height: 14rem;
   overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 
 /* Deliberately loud: an active impersonation grant must never be something
-   an operator can fail to notice. */
+   an operator can fail to notice. Kept red + amber on purpose, outside the
+   brand palette. */
 .impersonation-banner {
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.5rem;
-  background: #7a0016;
+  background: #9f1239;
   color: #fff;
-  border-bottom: 4px solid #ffcc00;
+  border-bottom: 4px solid #fbbf24;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -216,10 +511,15 @@ button:disabled {
 .impersonation-banner button {
   margin-left: auto;
   background: #fff;
-  color: #7a0016;
+  color: #9f1239;
   font-weight: 700;
   border-color: #fff;
+  box-shadow: none;
   white-space: nowrap;
+}
+
+.impersonation-banner button:hover {
+  background: #ffe4e6;
 }
 
 .impersonation-banner-error {

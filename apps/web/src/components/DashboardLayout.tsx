@@ -3,6 +3,16 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDashboardAuth } from "../auth/DashboardAuthContext.js";
 import { RequireRole } from "../auth/RequireRole.js";
 import { describeError } from "../api/client.js";
+import {
+  BrandMark,
+  IconLink,
+  IconLogout,
+  IconOverview,
+  IconReconcile,
+  IconSettlement,
+  IconTransactions,
+  IconWebhook,
+} from "./Icons.js";
 import "../dashboard.css";
 
 /** Nav shell for every merchant dashboard screen. No impersonation banner
@@ -25,53 +35,85 @@ export function DashboardLayout() {
     }
   }
 
+  const initials = (me?.merchant.displayName ?? me?.email ?? "?")
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <div className="dash-shell">
-      <header className="dash-header">
-        <div className="dash-brand">FilsPay</div>
+      <aside className="dash-sidebar">
+        <div className="dash-brand">
+          <BrandMark />
+          <span>FilsPay</span>
+        </div>
         <nav className="dash-nav">
-          <NavLink to="/dashboard/transactions">Transactions</NavLink>
-          <NavLink to="/dashboard/payment-links">Payment links</NavLink>
+          <NavLink to="/dashboard/overview">
+            <IconOverview /> Overview
+          </NavLink>
+          <NavLink to="/dashboard/transactions">
+            <IconTransactions /> Transactions
+          </NavLink>
+          <NavLink to="/dashboard/payment-links">
+            <IconLink /> Payment links
+          </NavLink>
+          <NavLink to="/dashboard/settlement">
+            <IconSettlement /> Settlement
+          </NavLink>
+          <RequireRole allow={["owner", "finance"]}>
+            <NavLink to="/dashboard/reconciliation">
+              <IconReconcile /> Reconciliation
+            </NavLink>
+          </RequireRole>
           {/* Every webhook route — including the plain list read — is
               owner/finance-only server-side, so the link itself is
               hidden from support rather than offered and then refused. */}
           <RequireRole allow={["owner", "finance"]}>
-            <NavLink to="/dashboard/webhooks">Webhooks</NavLink>
+            <NavLink to="/dashboard/webhooks">
+              <IconWebhook /> Webhooks
+            </NavLink>
           </RequireRole>
-          <NavLink to="/dashboard/settlement">Settlement</NavLink>
-          <RequireRole allow={["owner", "finance"]}>
-            <NavLink to="/dashboard/reconciliation">Reconciliation</NavLink>
-          </RequireRole>
-          <NavLink to="/dashboard/overview">Overview</NavLink>
         </nav>
-        <div className="dash-identity">
+        {me?.impersonation ? null : (
+          <button type="button" className="dash-nav-button" onClick={() => void handleSignOut()}>
+            <IconLogout /> Log out
+          </button>
+        )}
+      </aside>
+
+      <div className="dash-content">
+        <header className="dash-header">
           {me ? (
-            <span>
-              {me.email} <span className="dash-role-chip">{me.role}</span>
-              <span className="dash-muted"> · {me.merchant.displayName}</span>
-            </span>
+            <div className="dash-identity">
+              <span className="dash-avatar" aria-hidden="true">
+                {initials}
+              </span>
+              <span className="dash-identity-text">
+                <strong>{me.merchant.displayName}</strong>
+                <span className="dash-muted">
+                  {me.email} <span className="dash-role-chip">{me.role}</span>
+                </span>
+              </span>
+            </div>
           ) : null}
-          {me?.impersonation ? null : (
-            <button type="button" className="dash-button" onClick={() => void handleSignOut()}>
-              Log out
-            </button>
-          )}
-        </div>
-      </header>
+        </header>
 
-      {me?.impersonation ? (
-        <p className="dash-impersonation-banner" role="status">
-          <strong>Viewing as {me.merchant.displayName} (read-only).</strong> You are an admin using a
-          "View as merchant" grant: you can see everything, but nothing can be changed. End it with{" "}
-          <em>Exit impersonation</em> in the admin console.
-        </p>
-      ) : null}
+        {me?.impersonation ? (
+          <p className="dash-impersonation-banner" role="status">
+            <strong>Viewing as {me.merchant.displayName} (read-only).</strong> You are an admin using
+            a "View as merchant" grant: you can see everything, but nothing can be changed. End it
+            with <em>Exit impersonation</em> in the admin console.
+          </p>
+        ) : null}
 
-      {error ? <p className="dash-error">{error}</p> : null}
+        {error ? <p className="dash-error">{error}</p> : null}
 
-      <main className="dash-main">
-        <Outlet />
-      </main>
+        <main className="dash-main">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- am: title says Checkout but this is the whole dashboard too -->
     <title>FilsPay Checkout</title>
+    <!-- Page canvas for both halves of the app (dashboard + /pay checkout).
+         Kept here, not in a .css file, so no stylesheet needs a bare
+         element selector. -->
+    <style>
+      html, body { margin: 0; background: #050816; color: #f8fafc; color-scheme: dark; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

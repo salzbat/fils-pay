@@ -8,6 +8,7 @@ import {
   writeLastMerchantId,
 } from "../../auth/DashboardAuthContext.js";
 import type { DashboardLoginResponse } from "../../types.js";
+import { BrandMark } from "../../components/Icons.js";
 import "../../dashboard.css";
 
 type Step = { kind: "credentials" } | { kind: "otp"; challenge: DashboardLoginResponse };
@@ -121,6 +122,7 @@ export function LoginPage() {
 
   return (
     <main className="dash-centered">
+      <BrandMark size={40} />
       <h1>FilsPay dashboard</h1>
       <p className="dash-muted">Merchant sign-in.</p>
 

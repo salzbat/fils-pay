@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPayoutTrends, getTopLinks, getVolumes } from "../../api/analytics.js";
 import { describeError } from "../../api/client.js";
+import { AreaChart } from "../../components/AreaChart.js";
 import { StalenessBadge } from "../../components/StalenessBadge.js";
 import { bhd, dash, dateTime } from "../../format.js";
 import { formatCount } from "../../utils/helpers.js";
@@ -65,9 +66,24 @@ export function OverviewPage() {
 
   const peakGross = Math.max(1, ...(volumes?.points.map((point) => point.capturedGrossFils) ?? [1]));
 
+  // Window totals for the stat cards: integer sums of integer fils/counts,
+  // formatted by `bhd` like every other amount on this page.
+  const volumePoints = volumes?.points ?? [];
+  const totalGrossFils = volumePoints.reduce((sum, point) => sum + point.capturedGrossFils, 0);
+  const totalCaptured = volumePoints.reduce((sum, point) => sum + point.capturedCount, 0);
+  const totalVoided = volumePoints.reduce((sum, point) => sum + point.voidedCount, 0);
+  const totalNetPayoutFils = (payouts?.points ?? []).reduce((sum, point) => sum + point.netPayoutFils, 0);
+
   return (
     <section>
-      <h1>Overview</h1>
+      <div className="dash-page-head">
+        <div>
+          <h1>Overview</h1>
+          <p className="dash-muted">
+            {from || to ? "Your business in the selected window." : "Your business over the last 30 days."}
+          </p>
+        </div>
+      </div>
 
       <form
         className="dash-form dash-form-inline"
@@ -100,6 +116,44 @@ export function OverviewPage() {
       </form>
 
       {error ? <p className="dash-error">{error}</p> : null}
+
+      <div className="dash-kpis">
+        <div className="dash-card">
+          <div className="dash-kpi-label">Captured volume</div>
+          <div className="dash-kpi-value">{volumes ? bhd(totalGrossFils) : "—"}</div>
+          <div className="dash-kpi-sub">Gross, before fees</div>
+        </div>
+        <div className="dash-card">
+          <div className="dash-kpi-label">Captured payments</div>
+          <div className="dash-kpi-value">{volumes ? formatCount(totalCaptured) : "—"}</div>
+          <div className="dash-kpi-sub">In this window</div>
+        </div>
+        <div className="dash-card">
+          <div className="dash-kpi-label">Voided payments</div>
+          <div className="dash-kpi-value">{volumes ? formatCount(totalVoided) : "—"}</div>
+          <div className="dash-kpi-sub dash-muted">In this window</div>
+        </div>
+        <div className="dash-card">
+          <div className="dash-kpi-label">Net payouts</div>
+          <div className="dash-kpi-value">{payouts ? bhd(totalNetPayoutFils) : "—"}</div>
+          <div className="dash-kpi-sub">Across settled batches</div>
+        </div>
+      </div>
+
+      <div className="dash-card dash-chart-card">
+        <div className="dash-chart-head">
+          <div>
+            <div className="dash-kpi-label">Payment volume</div>
+            <div className="dash-kpi-value">{volumes ? bhd(totalGrossFils) : "—"}</div>
+          </div>
+          {volumes ? <StalenessBadge readModelAsOf={volumes.readModelAsOf} live={volumes.live} /> : null}
+        </div>
+        <AreaChart
+          values={volumePoints.map((point) => point.capturedGrossFils)}
+          labels={volumePoints.map((point) => point.date)}
+          formatValue={bhd}
+        />
+      </div>
 
       <h2>
         Captured volume{" "}

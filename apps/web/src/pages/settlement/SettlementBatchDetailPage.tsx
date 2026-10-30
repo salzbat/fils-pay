@@ -87,8 +87,8 @@ export function SettlementBatchDetailPage() {
     <section>
       <h1>Settlement batch {batch.batchDate}</h1>
       {batch.status === "closed" && (
-        <div className="dash-progress-bar" style={{ width: "100%", background: "#e0e0e0", height: 6, borderRadius: 3 }}>
-          <div style={{ width: `${Math.min(displayProgress, 100)}%`, background: "#2563eb", height: 6, borderRadius: 3 }} />
+        <div className="dash-progress-bar">
+          <div className="dash-progress-fill" style={{ width: `${Math.min(displayProgress, 100)}%` }} />
         </div>
       )}
       <p className="dash-muted">

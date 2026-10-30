@@ -136,6 +136,10 @@ services:
       # No email/SMS channel exists; without this nobody can log in to a
       # hosted stack. Demo only (docs/HOSTING.md).
       OTP_LOG_CODES: ${OTP_LOG_CODES:-false}
+      # LOCAL TESTING ONLY: returns the OTP in the login response, and the
+      # login pages show it on screen. That makes the second factor useless
+      # (#45), so never set it on a hosted or judged server.
+      OTP_DEV_EXPOSE: ${OTP_DEV_EXPOSE:-false}
     restart: unless-stopped
     cpus: 0.5
     mem_limit: 512m
